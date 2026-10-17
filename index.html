@@ -113,6 +113,13 @@ button{cursor:pointer}
 .controls label{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
 .btn-share.on{background:var(--live);border-color:var(--live);color:#fff}
 
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:min(560px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto}
+dialog::backdrop{background:rgba(5,8,14,.6)}
+dialog h3{font:600 18px/1.3 var(--f-display);margin:0 0 10px}
+dialog p,dialog li{font-size:14px;line-height:1.55}
+dialog ol{padding-left:20px;display:flex;flex-direction:column;gap:8px}
+dialog ol ol{margin-top:6px;gap:4px}
+dialog form{display:flex;justify-content:flex-end;margin-top:8px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
 .toast.show{opacity:1}
 
@@ -195,11 +202,37 @@ button{cursor:pointer}
         <option value="1440-60">1440p · 60 fps</option>
       </select>
     </label>
-    <label for="audioChk"><input type="checkbox" id="audioChk" checked> Som da tela</label>
+    <label for="audioSel">Som
+      <select id="audioSel">
+        <option value="system">Do computador</option>
+        <option value="tab">Só de uma aba</option>
+        <option value="none">Sem som</option>
+      </select>
+    </label>
+    <button type="button" id="echoHelpBtn" class="btn btn-sm">Eco do Discord?</button>
     <button id="shareBtn" class="btn btn-primary btn-share">Compartilhar tela</button>
     <button id="leaveBtn" class="btn btn-danger">Sair</button>
   </footer>
 </section>
+
+<dialog id="echoHelp" aria-labelledby="echoTitle">
+  <h3 id="echoTitle">Seus amigos estão se ouvindo?</h3>
+  <p>No modo <b>Do computador</b>, o navegador captura tudo que sai do seu fone ou caixa de som, inclusive as vozes do Discord. Ele não consegue deixar de fora só um programa. Há três saídas:</p>
+  <ol>
+    <li><b>Só de uma aba</b>: se o que você mostra roda no navegador (vídeo, filme, jogo de navegador), escolha essa opção e, na janela de compartilhamento, selecione a aba. Vai só o som dela, sem Discord.</li>
+    <li><b>Sem som</b>: mostra a imagem e deixa o áudio de fora.</li>
+    <li><b>Separar o Discord no Windows</b> (para jogos e programas, configurado uma vez só):
+      <ol>
+        <li>Instale o VB-Audio Virtual Cable, que é gratuito (site vb-audio.com/Cable), e reinicie o PC.</li>
+        <li>Em Configurações → Sistema → Som, escolha <b>CABLE Input</b> como saída padrão.</li>
+        <li>Abra Painel de Som → aba Gravação → <b>CABLE Output</b> → Propriedades → aba Escutar. Marque “Escutar este dispositivo” e escolha seu fone ou caixa de som.</li>
+        <li>No Discord, em Configurações → Voz e vídeo → Dispositivo de saída, escolha seu fone ou caixa de som direto, sem usar “Padrão”.</li>
+      </ol>
+      Pronto: o jogo passa pelo cabo virtual e vai para o Telão, e o Discord vai direto para o seu fone, fora da captura.
+    </li>
+  </ol>
+  <form method="dialog"><button class="btn btn-primary">Entendi</button></form>
+</dialog>
 
 <div id="toast" class="toast" role="status"></div>
 
@@ -410,17 +443,27 @@ button{cursor:pointer}
       toast("Este navegador não permite compartilhar a tela. Use Chrome, Edge ou Firefox no computador."); return;
     }
     const q = QUALITY[$("qualitySel").value];
+    const mode = $("audioSel").value;
+    const opts = {
+      video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
+      audio: mode === "none" ? false : { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      selfBrowserSurface: "exclude",
+      surfaceSwitching: "include",
+      systemAudio: mode === "system" ? "include" : "exclude",
+    };
+    if (mode === "tab") opts.video.displaySurface = "browser";
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
-        audio: $("audioChk").checked ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
-      });
+      screenStream = await navigator.mediaDevices.getDisplayMedia(opts);
     } catch (e){
       if (e && e.name !== "NotAllowedError") toast("Não foi possível capturar a tela.");
       return;
     }
     const vt = screenStream.getVideoTracks()[0];
     if (vt){ vt.contentHint = q.fps >= 60 ? "motion" : "detail"; vt.onended = () => stopShare(); }
+    const hasAudio = screenStream.getAudioTracks().length > 0;
+    const surface = vt?.getSettings?.().displaySurface;
+    if (mode === "tab" && !hasAudio) toast("Sem som: para enviar o áudio, escolha uma aba e marque “Compartilhar áudio da guia”.");
+    else if (mode === "system" && hasAudio && surface === "monitor") toast("Enviando o som do computador. Se estiver no Discord, veja “Eco do Discord?”.");
     $("shareBtn").textContent = "Parar transmissão"; $("shareBtn").classList.add("on");
     addTile(myId, screenStream, true);
     sharing.add(myId);
@@ -552,6 +595,9 @@ button{cursor:pointer}
   });
 
   // ---------- barra ----------
+  $("audioSel").value = ["system","tab","none"].includes(store.get("telao-audio")) ? store.get("telao-audio") : "system";
+  $("audioSel").onchange = () => store.set("telao-audio", $("audioSel").value);
+  $("echoHelpBtn").onclick = () => { const d = $("echoHelp"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); };
   $("copyCodeBtn").onclick = () => copy(roomCode, "Código copiado");
   $("leaveBtn").onclick = leave;
   function leave(){
