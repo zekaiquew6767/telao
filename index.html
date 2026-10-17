@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Telão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: lobby centralizado; na sala, palco de telas à esquerda + painel (pessoas/chat) à direita, controles embaixo */
+:root{
+  --bg:#eef0f5; --panel:#ffffff; --sunk:#e3e6ee; --line:#d3d8e3;
+  --fg:#151a26; --muted:#5b6476; --accent:#e89a1c; --accent-ink:#1b1204;
+  --live:#d6324a; --ok:#1f9d63;
+  --f-display:"Unbounded",system-ui,sans-serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1018; --panel:#151a25; --sunk:#0a0d14; --line:#252c3b;
+  --fg:#e8ebf2; --muted:#8c95a8; --accent:#f2a93b; --accent-ink:#1b1204;
+  --live:#ff5a6e; --ok:#3cc98a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1018; --panel:#151a25; --sunk:#0a0d14; --line:#252c3b;
+  --fg:#e8ebf2; --muted:#8c95a8; --accent:#f2a93b; --accent-ink:#1b1204;
+  --live:#ff5a6e; --ok:#3cc98a; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body)}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- Lobby ---------- */
+#lobby{min-height:100%;display:grid;place-items:center;padding-block:32px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.lobby-card{width:100%;max-width:440px;display:flex;flex-direction:column;gap:24px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:44px;height:30px;border:3px solid var(--fg);border-radius:6px;position:relative}
+.brand-mark::after{content:"";position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.6s infinite}
+.brand h1{font:700 32px/1 var(--f-display);margin:0;letter-spacing:-.02em}
+.tag{color:var(--muted);margin:0;max-width:38ch}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.input{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;width:100%}
+.input:focus{border-color:var(--accent);outline:none}
+.code-input{font-family:var(--f-mono);text-transform:lowercase;letter-spacing:.1em}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:11px 16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .08s,background .15s}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn-danger{background:transparent;color:var(--live);border-color:var(--live)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px}
+.row>.input{flex:1;min-width:0}
+.divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.fine{font-size:13px;color:var(--muted);margin:0}
+.err{color:var(--live);font-size:14px;margin:0;min-height:1.2em}
+
+/* ---------- Sala ---------- */
+#room{height:100%;display:grid;grid-template-rows:auto 1fr auto}
+.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.topbar .brand h1{font-size:18px}
+.topbar .brand-mark{width:30px;height:21px;border-width:2px}
+.topbar .brand-mark::after{width:5px;height:5px;right:3px;top:3px}
+.room-code{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.chip{font-family:var(--f-mono);background:var(--sunk);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;letter-spacing:.08em}
+.btn-sm{padding:6px 12px;font-size:13px;border-radius:8px}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--ok)}
+
+.main{display:grid;grid-template-columns:1fr 300px;min-height:0}
+.stage{min-height:0;overflow:auto;padding:16px;display:grid;gap:12px;align-content:start;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.stage.solo{grid-template-columns:1fr;align-content:center}
+.tile{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:16/9;max-width:100%;border:1px solid var(--line)}
+.tile video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.tile-bar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:13px}
+.live-pill{background:var(--live);color:#fff;font-size:10px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:4px}
+.tile-bar .name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile-bar button{background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:6px;padding:4px 9px;font-size:12px}
+.tile-bar input[type=range]{width:70px;accent-color:#fff}
+.empty{grid-column:1/-1;border:2px dashed var(--line);border-radius:14px;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--muted);padding:24px}
+.empty strong{font:500 18px/1.3 var(--f-display);color:var(--fg)}
+
+.side{border-left:1px solid var(--line);background:var(--panel);display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+.side h2{font:600 12px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.people{padding:14px 16px;border-bottom:1px solid var(--line);max-height:40vh;overflow:auto}
+.people ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.people li{display:flex;align-items:center;gap:10px;font-size:14px}
+.avatar{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff;flex:none}
+.people .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.people .you{color:var(--muted);font-size:12px}
+.chat{overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.msg{font-size:14px;overflow-wrap:anywhere}
+.msg b{font-weight:600}
+.msg time{color:var(--muted);font-size:11px;margin-left:6px;font-variant-numeric:tabular-nums}
+.sys{color:var(--muted);font-size:13px;font-style:italic}
+.chat-form{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.chat-form .input{padding:9px 12px}
+
+.controls{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding-block:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-top:1px solid var(--line);background:var(--panel)}
+.controls select{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.controls label{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.btn-share.on{background:var(--live);border-color:var(--live);color:#fff}
+
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
+.toast.show{opacity:1}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:820px){
+  #room{height:auto;min-height:100%}
+  .main{grid-template-columns:1fr}
+  .side{border-left:0;border-top:1px solid var(--line);grid-template-rows:auto 280px auto}
+}
+</style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<section id="lobby">
+  <div class="lobby-card">
+    <div class="brand"><div class="brand-mark" aria-hidden="true"></div><h1>Telão</h1></div>
+    <p class="tag">Salas privadas para compartilhar a tela. A imagem vai direto de um computador para o outro, sem passar por servidor e sem gravação.</p>
+
+    <div class="field">
+      <label class="label" for="nameInput">Seu nome</label>
+      <input id="nameInput" class="input" maxlength="24" placeholder="Como os outros vão te ver" autocomplete="nickname">
+    </div>
+
+    <button id="createBtn" class="btn btn-primary">Criar sala privada</button>
+
+    <div class="divider">ou entre numa sala</div>
+
+    <div class="field">
+      <label class="label" for="codeInput">Código da sala</label>
+      <div class="row">
+        <input id="codeInput" class="input code-input" maxlength="11" placeholder="ex: k7f-q2m-9xa" autocomplete="off" spellcheck="false">
+        <button id="joinBtn" class="btn">Entrar</button>
+      </div>
+    </div>
+    <p id="lobbyErr" class="err" role="alert"></p>
+    <p class="fine">Funciona no Chrome, Edge, Firefox e Opera no computador. No celular dá para assistir, mas não para compartilhar.</p>
+  </div>
+</section>
+
+<!-- SALA -->
+<section id="room" hidden>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark" aria-hidden="true"></div><h1>Telão</h1></div>
+    <span class="status"><span id="netDot" class="dot"></span><span id="netText">Conectando…</span></span>
+    <div class="room-code">
+      <span class="chip" id="codeChip" title="Código da sala"></span>
+      <button class="btn btn-sm" id="copyCodeBtn">Copiar código</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div id="stage" class="stage">
+      <div class="empty" id="emptyStage">
+        <strong>Ninguém está transmitindo</strong>
+        <span>Clique em “Compartilhar tela” para mostrar a sua, ou mande o código para alguém entrar.</span>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="people">
+        <h2>Na sala · <span id="peopleCount">1</span></h2>
+        <ul id="peopleList"></ul>
+      </div>
+      <div class="chat" id="chatLog" aria-live="polite"></div>
+      <form class="chat-form" id="chatForm">
+        <input id="chatInput" class="input" maxlength="500" placeholder="Mensagem para a sala" autocomplete="off">
+        <button class="btn btn-sm" type="submit">Enviar</button>
+      </form>
+    </aside>
+  </div>
+
+  <footer class="controls">
+    <label for="qualitySel">Qualidade
+      <select id="qualitySel">
+        <option value="720-30">720p · 30 fps</option>
+        <option value="1080-30" selected>1080p · 30 fps</option>
+        <option value="1080-60">1080p · 60 fps</option>
+        <option value="1440-60">1440p · 60 fps</option>
+      </select>
+    </label>
+    <label for="audioChk"><input type="checkbox" id="audioChk" checked> Som da tela</label>
+    <button id="shareBtn" class="btn btn-primary btn-share">Compartilhar tela</button>
+    <button id="leaveBtn" class="btn btn-danger">Sair</button>
+  </footer>
+</section>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+  "use strict";
+  const PREFIX = "telao2-sala-";
+  const QUALITY = {
+    "720-30":  { w:1280, h:720,  fps:30, kbps:2500 },
+    "1080-30": { w:1920, h:1080, fps:30, kbps:4500 },
+    "1080-60": { w:1920, h:1080, fps:60, kbps:7000 },
+    "1440-60": { w:2560, h:1440, fps:60, kbps:10000 },
+  };
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+  };
+
+  // ---------- estado ----------
+  let peer = null;            // Peer do PeerJS
+  let myId = null, myName = "", roomCode = "", isHost = false;
+  const conns = new Map();    // peerId -> DataConnection
+  const names = new Map();    // peerId -> nome
+  const sharing = new Set();  // peerIds transmitindo
+  const outCalls = new Map(); // peerId -> MediaConnection (minha tela indo para ele)
+  const inCalls = new Map();  // peerId -> MediaConnection (tela dele chegando)
+  let screenStream = null;
+
+  // ---------- util ----------
+  const randCode = () => {
+    const a = "abcdefghjkmnpqrstuvwxyz23456789";
+    const r = crypto.getRandomValues(new Uint8Array(9));
+    const s = [...r].map(b => a[b % a.length]).join("");
+    return `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}`;
+  };
+  const colorFor = id => {
+    let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return `hsl(${h % 360} 55% 45%)`;
+  };
+  const clean = s => String(s ?? "").replace(/[\u0000-\u001f]/g, "").slice(0, 500);
+  let toastT;
+  function toast(text){
+    const t = $("toast"); t.textContent = text; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2400);
+  }
+  async function copy(text, label){
+    try { await navigator.clipboard.writeText(text); toast(label); }
+    catch { toast("Não deu para copiar. Selecione o código e copie manualmente."); }
+  }
+  function setNet(on, text){ $("netDot").classList.toggle("on", on); $("netText").textContent = text; }
+
+  // ---------- lobby ----------
+  $("nameInput").value = store.get("telao-name") || "";
+  const hashCode = (location.hash || "").replace("#", "").toLowerCase();
+  if (/^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/.test(hashCode)) $("codeInput").value = hashCode;
+
+  function readName(){
+    const n = clean($("nameInput").value).trim().slice(0, 24);
+    if (!n){ $("lobbyErr").textContent = "Escreva seu nome antes de continuar."; $("nameInput").focus(); return null; }
+    store.set("telao-name", n); return n;
+  }
+  $("createBtn").onclick = () => { const n = readName(); if (n) start(n, randCode(), true); };
+  $("joinBtn").onclick = () => {
+    const n = readName(); if (!n) return;
+    const c = $("codeInput").value.trim().toLowerCase();
+    if (!/^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/.test(c)){
+      $("lobbyErr").textContent = "O código tem o formato abc-123-xyz. Confira com quem criou a sala."; return;
+    }
+    start(n, c, false);
+  };
+  $("codeInput").addEventListener("keydown", e => { if (e.key === "Enter") $("joinBtn").click(); });
+
+  function lobbyError(msg){
+    $("lobbyErr").textContent = msg;
+    $("createBtn").disabled = $("joinBtn").disabled = false;
+  }
+
+  // ---------- entrar ----------
+  function start(name, code, host){
+    if (typeof Peer === "undefined"){ lobbyError("Não foi possível carregar o motor de conexão. Verifique sua internet e recarregue."); return; }
+    $("lobbyErr").textContent = "";
+    $("createBtn").disabled = $("joinBtn").disabled = true;
+    myName = name; roomCode = code; isHost = host;
+
+    peer = host ? new Peer(PREFIX + code, { debug: 1 }) : new Peer({ debug: 1 });
+
+    peer.on("open", id => {
+      myId = id; names.set(myId, myName);
+      enterRoom();
+      if (!isHost) connectTo(PREFIX + roomCode, true);
+      else sys("Sala criada. Mande o código para quem você quiser chamar.");
+    });
+    peer.on("connection", conn => setupConn(conn));
+    peer.on("call", call => {
+      call.answer(); // só recebemos; nada é enviado de volta
+      inCalls.get(call.peer)?.close();
+      inCalls.set(call.peer, call);
+      call.on("stream", s => addTile(call.peer, s));
+      call.on("close", () => { if (inCalls.get(call.peer) === call){ inCalls.delete(call.peer); removeTile(call.peer); } });
+      call.on("error", () => removeTile(call.peer));
+    });
+    peer.on("disconnected", () => { setNet(false, "Reconectando…"); try { peer.reconnect(); } catch {} });
+    peer.on("error", err => {
+      const t = err.type;
+      if (!myId){
+        if (t === "unavailable-id") lobbyError("Esse código já está em uso. Tente criar outra sala.");
+        else lobbyError("Não foi possível conectar ao servidor de encontro. Tente de novo em instantes.");
+        try { peer.destroy(); } catch {}
+        return;
+      }
+      if (t === "peer-unavailable"){
+        const missing = String(err.message || "").replace(/.*peer\s+/i, "").trim();
+        if (missing === PREFIX + roomCode && conns.size === 0){
+          toast("Sala não encontrada. Confira o código ou peça para quem criou abrir de novo.");
+          setTimeout(leave, 2200);
+        }
+        return;
+      }
+      if (t === "network" || t === "server-error" || t === "socket-error") setNet(false, "Sem conexão com o servidor de encontro");
+    });
+  }
+
+  function enterRoom(){
+    $("lobby").hidden = true; $("room").hidden = false;
+    $("codeChip").textContent = roomCode;
+    setNet(true, isHost ? "Você é o anfitrião" : "Conectado");
+    renderPeople();
+  }
+
+  // ---------- conexões de dados (malha: todo mundo liga com todo mundo) ----------
+  function connectTo(id){
+    if (!id || id === myId || conns.has(id)) return;
+    const conn = peer.connect(id, { reliable: true, metadata: { name: myName } });
+    setupConn(conn);
+  }
+
+  function setupConn(conn){
+    const id = conn.peer;
+    if (conns.has(id) && conns.get(id) !== conn){
+      // conexões cruzadas: mantém a que vem do id "menor"
+      if (myId < id){ conn.close(); return; }
+      conns.get(id).close();
+    }
+    conns.set(id, conn);
+    if (conn.metadata?.name) names.set(id, clean(conn.metadata.name).slice(0, 24));
+
+    conn.on("open", () => {
+      send(conn, { t: "hello", name: myName, sharing: !!screenStream });
+      if (isHost){
+        const others = [...conns.keys()].filter(k => k !== id);
+        send(conn, { t: "peers", list: others });
+      }
+      if (screenStream) callWithScreen(id);
+      renderPeople();
+    });
+    conn.on("data", d => onData(id, d));
+    conn.on("close", () => dropPeer(id, conn));
+    conn.on("error", () => dropPeer(id, conn));
+  }
+
+  function dropPeer(id, conn){
+    if (conn && conns.get(id) !== conn) return;
+    const had = conns.has(id);
+    conns.delete(id); sharing.delete(id);
+    outCalls.get(id)?.close(); outCalls.delete(id);
+    inCalls.get(id)?.close(); inCalls.delete(id);
+    removeTile(id);
+    if (had) sys(`${names.get(id) || "Alguém"} saiu.`);
+    if (id === PREFIX + roomCode && !isHost) sys("O anfitrião saiu. Quem já está aqui continua conectado, mas ninguém novo consegue entrar.");
+    names.delete(id);
+    renderPeople();
+  }
+
+  function send(conn, msg){ try { if (conn.open) conn.send(msg); } catch {} }
+  function broadcast(msg){ for (const c of conns.values()) send(c, msg); }
+
+  function onData(id, d){
+    if (!d || typeof d !== "object") return;
+    switch (d.t){
+      case "hello": {
+        const first = !names.has(id) || !conns.get(id)?._greeted;
+        names.set(id, clean(d.name).slice(0, 24) || "Sem nome");
+        if (d.sharing) sharing.add(id); else sharing.delete(id);
+        const c = conns.get(id); if (c && !c._greeted){ c._greeted = true; sys(`${names.get(id)} entrou.`); }
+        renderPeople();
+        break;
+      }
+      case "peers":
+        if (Array.isArray(d.list)) d.list.filter(x => typeof x === "string").slice(0, 32).forEach(connectTo);
+        break;
+      case "chat":
+        addMsg(names.get(id) || "Alguém", clean(d.text), colorFor(id));
+        break;
+      case "share":
+        if (d.on) sharing.add(id); else { sharing.delete(id); removeTile(id); inCalls.get(id)?.close(); inCalls.delete(id); }
+        renderPeople();
+        break;
+    }
+  }
+
+  // ---------- compartilhamento de tela ----------
+  $("shareBtn").onclick = () => screenStream ? stopShare() : startShare();
+
+  async function startShare(){
+    if (!navigator.mediaDevices?.getDisplayMedia){
+      toast("Este navegador não permite compartilhar a tela. Use Chrome, Edge ou Firefox no computador."); return;
+    }
+    const q = QUALITY[$("qualitySel").value];
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
+        audio: $("audioChk").checked ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+      });
+    } catch (e){
+      if (e && e.name !== "NotAllowedError") toast("Não foi possível capturar a tela.");
+      return;
+    }
+    const vt = screenStream.getVideoTracks()[0];
+    if (vt){ vt.contentHint = q.fps >= 60 ? "motion" : "detail"; vt.onended = () => stopShare(); }
+    $("shareBtn").textContent = "Parar transmissão"; $("shareBtn").classList.add("on");
+    addTile(myId, screenStream, true);
+    sharing.add(myId);
+    broadcast({ t: "share", on: true });
+    for (const id of conns.keys()) callWithScreen(id);
+    renderPeople();
+  }
+
+  function callWithScreen(id){
+    if (!screenStream) return;
+    outCalls.get(id)?.close();
+    const call = peer.call(id, screenStream, { metadata: { kind: "screen" } });
+    if (!call) return;
+    outCalls.set(id, call);
+    applyBitrate(call);
+    call.on("close", () => { if (outCalls.get(id) === call) outCalls.delete(id); });
+  }
+
+  function applyBitrate(call){
+    const q = QUALITY[$("qualitySel").value];
+    const tryIt = async (n) => {
+      const pc = call.peerConnection;
+      const sender = pc?.getSenders().find(s => s.track && s.track.kind === "video");
+      if (!sender){ if (n < 20) setTimeout(() => tryIt(n + 1), 250); return; }
+      try {
+        const p = sender.getParameters();
+        if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = q.kbps * 1000;
+        p.encodings[0].maxFramerate = q.fps;
+        p.degradationPreference = q.fps >= 60 ? "maintain-framerate" : "maintain-resolution";
+        await sender.setParameters(p);
+      } catch {}
+    };
+    tryIt(0);
+  }
+
+  function stopShare(){
+    if (!screenStream) return;
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    for (const c of outCalls.values()) c.close();
+    outCalls.clear();
+    removeTile(myId); sharing.delete(myId);
+    broadcast({ t: "share", on: false });
+    $("shareBtn").textContent = "Compartilhar tela"; $("shareBtn").classList.remove("on");
+    renderPeople();
+  }
+
+  // ---------- palco ----------
+  const tiles = new Map();
+  function addTile(id, stream, mine = false){
+    let t = tiles.get(id);
+    if (!t){
+      t = document.createElement("div"); t.className = "tile";
+      const v = document.createElement("video");
+      v.autoplay = true; v.playsInline = true; v.muted = true;
+      const bar = document.createElement("div"); bar.className = "tile-bar";
+      const pill = document.createElement("span"); pill.className = "live-pill"; pill.textContent = "AO VIVO";
+      const nm = document.createElement("span"); nm.className = "name";
+      bar.append(pill, nm);
+      if (!mine){
+        const snd = document.createElement("button"); snd.type = "button"; snd.textContent = "Ativar som";
+        const vol = document.createElement("input"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = .05; vol.value = 1;
+        vol.setAttribute("aria-label", "Volume"); vol.hidden = true;
+        snd.onclick = () => { v.muted = !v.muted; snd.textContent = v.muted ? "Ativar som" : "Mudo"; vol.hidden = v.muted; v.play().catch(()=>{}); };
+        vol.oninput = () => { v.volume = +vol.value; };
+        bar.append(snd, vol);
+      }
+      const fs = document.createElement("button"); fs.type = "button"; fs.textContent = "Tela cheia";
+      fs.onclick = () => { (t.requestFullscreen ? t.requestFullscreen() : Promise.reject()).catch(() => toast("Tela cheia indisponível aqui.")); };
+      bar.append(fs);
+      t.append(v, bar);
+      t.addEventListener("dblclick", () => fs.click());
+      $("stage").append(t);
+      tiles.set(id, t);
+    }
+    t.querySelector(".name").textContent = mine ? "Sua tela" : (names.get(id) || "Alguém");
+    const v = t.querySelector("video");
+    if (v.srcObject !== stream){ v.srcObject = stream; v.play().catch(() => {}); }
+    layoutStage();
+  }
+  function removeTile(id){
+    const t = tiles.get(id); if (!t) return;
+    const v = t.querySelector("video"); v.srcObject = null;
+    if (document.fullscreenElement === t) document.exitFullscreen().catch(()=>{});
+    t.remove(); tiles.delete(id); layoutStage();
+  }
+  function layoutStage(){
+    $("emptyStage").hidden = tiles.size > 0;
+    $("stage").classList.toggle("solo", tiles.size === 1);
+  }
+
+  // ---------- pessoas e chat ----------
+  function renderPeople(){
+    const ul = $("peopleList"); ul.textContent = "";
+    const ids = [myId, ...[...conns.keys()].filter(k => conns.get(k).open)];
+    $("peopleCount").textContent = ids.length;
+    for (const id of ids){
+      const li = document.createElement("li");
+      const av = document.createElement("span"); av.className = "avatar"; av.style.background = colorFor(id);
+      const n = names.get(id) || "Conectando…"; av.textContent = n.slice(0, 1).toUpperCase();
+      const who = document.createElement("span"); who.className = "who"; who.textContent = n;
+      li.append(av, who);
+      if (id === myId){ const y = document.createElement("span"); y.className = "you"; y.textContent = "você"; li.append(y); }
+      if (sharing.has(id)){ const p = document.createElement("span"); p.className = "live-pill"; p.textContent = "AO VIVO"; li.append(p); }
+      ul.append(li);
+    }
+    for (const [id, t] of tiles) if (id !== myId) t.querySelector(".name").textContent = names.get(id) || "Alguém";
+  }
+  function stamp(){ return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }
+  function addMsg(name, text, color){
+    if (!text) return;
+    const d = document.createElement("div"); d.className = "msg";
+    const b = document.createElement("b"); b.textContent = name; b.style.color = color;
+    const tm = document.createElement("time"); tm.textContent = stamp();
+    const p = document.createElement("div"); p.textContent = text;
+    d.append(b, tm, p); $("chatLog").append(d); $("chatLog").scrollTop = $("chatLog").scrollHeight;
+  }
+  function sys(text){
+    const d = document.createElement("div"); d.className = "sys"; d.textContent = text;
+    $("chatLog").append(d); $("chatLog").scrollTop = $("chatLog").scrollHeight;
+  }
+  $("chatForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const text = clean($("chatInput").value).trim(); if (!text) return;
+    broadcast({ t: "chat", text });
+    addMsg(myName, text, colorFor(myId));
+    $("chatInput").value = "";
+  });
+
+  // ---------- barra ----------
+  $("copyCodeBtn").onclick = () => copy(roomCode, "Código copiado");
+  $("leaveBtn").onclick = leave;
+  function leave(){
+    stopShare();
+    try { peer?.destroy(); } catch {}
+    location.hash = ""; location.reload();
+  }
+  window.addEventListener("beforeunload", () => { try { peer?.destroy(); } catch {} });
+})();
+</script>
+</body>
+</html>
