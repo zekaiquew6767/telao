@@ -208,7 +208,10 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
         <option value="720-30">720p · 30 fps</option>
         <option value="1080-30" selected>1080p · 30 fps</option>
         <option value="1080-60">1080p · 60 fps</option>
+        <option value="1440-30">1440p · 30 fps</option>
         <option value="1440-60">1440p · 60 fps</option>
+        <option value="2160-30">4K · 30 fps</option>
+        <option value="2160-60">4K · 60 fps</option>
       </select>
     </label>
     <label for="audioSel">Som
@@ -254,7 +257,10 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     "720-30":  { w:1280, h:720,  fps:30, kbps:2500 },
     "1080-30": { w:1920, h:1080, fps:30, kbps:4500 },
     "1080-60": { w:1920, h:1080, fps:60, kbps:7000 },
+    "1440-30": { w:2560, h:1440, fps:30, kbps:7000 },
     "1440-60": { w:2560, h:1440, fps:60, kbps:10000 },
+    "2160-30": { w:3840, h:2160, fps:30, kbps:14000 },
+    "2160-60": { w:3840, h:2160, fps:60, kbps:20000 },
   };
   const $ = id => document.getElementById(id);
   const store = {
@@ -830,6 +836,20 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
   // ---------- barra ----------
   $("audioSel").value = ["system","tab","none"].includes(store.get("telao-audio")) ? store.get("telao-audio") : "system";
   $("audioSel").onchange = () => store.set("telao-audio", $("audioSel").value);
+  if (QUALITY[store.get("telao-quality")]) $("qualitySel").value = store.get("telao-quality");
+  // Troca a qualidade na hora, mesmo no meio da transmissão.
+  $("qualitySel").onchange = () => {
+    store.set("telao-quality", $("qualitySel").value);
+    if (!screenStream) return;
+    const q = QUALITY[$("qualitySel").value];
+    const vt = screenStream.getVideoTracks()[0];
+    if (vt){
+      vt.contentHint = q.fps >= 60 ? "motion" : "detail";
+      vt.applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } }).catch(() => {});
+    }
+    for (const call of outCalls.values()) applyBitrate(call);
+    toast("Qualidade alterada para " + $("qualitySel").selectedOptions[0].textContent);
+  };
   $("echoHelpBtn").onclick = () => { const d = $("echoHelp"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); };
   $("copyCodeBtn").onclick = () => copy(roomCode, "Código copiado");
   $("leaveBtn").onclick = leave;
