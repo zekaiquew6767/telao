@@ -85,6 +85,10 @@ button{cursor:pointer}
   background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:13px}
 .live-pill{background:var(--live);color:#fff;font-size:10px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:4px}
 .tile-bar .name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile{container-type:inline-size}
+.tile-bar .stats{font-size:11px;opacity:.9;white-space:nowrap;font-variant-numeric:tabular-nums;display:flex;gap:6px;align-items:center}
+.tile-bar .lim{background:#c98a14;color:#1b1204;font-weight:700;padding:1px 6px;border-radius:4px}
+@container (max-width:460px){.tile-bar .stats{display:none}}
 .tile-bar button{background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:6px;padding:4px 9px;font-size:12px}
 .tile-bar input[type=range]{width:70px;accent-color:#fff}
 .empty{grid-column:1/-1;border:2px dashed var(--line);border-radius:14px;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--muted);padding:24px}
@@ -123,7 +127,8 @@ svg.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-
 .meter-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--muted);transition:width .05s linear}
 .meter-fill.open{background:var(--ok)}
 .meter-thr{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg);left:50%}
-#vThr{width:100%;accent-color:var(--accent)}
+#vThr,#vMicVol{width:100%;accent-color:var(--accent)}
+.mic-warn{margin:0;font-size:13px;line-height:1.45;color:var(--fg);background:color-mix(in srgb,var(--accent) 18%,transparent);border:1px solid var(--accent);border-radius:8px;padding:8px 10px}
 #vThr:disabled{opacity:.45}
 .side h2{font:600 12px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
 .people{padding:14px 16px;border-bottom:1px solid var(--line);max-height:40vh;overflow:auto}
@@ -301,6 +306,11 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     <div class="field">
       <label class="label" for="vMic">Microfone</label>
       <select id="vMic" class="input"><option value="">Padrão do sistema</option></select>
+      <p class="mic-warn" id="vMicWarn" hidden></p>
+    </div>
+    <div class="field">
+      <label class="label" for="vMicVol">Volume do microfone · <span id="vMicVolTxt">100%</span></label>
+      <input type="range" id="vMicVol" min="50" max="200" step="10">
     </div>
     <div class="field" id="vOutWrap">
       <label class="label" for="vOut">Saída de áudio</label>
@@ -484,7 +494,8 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     p.on("connection", conn => setupConn(conn));
     p.on("call", call => {
       if (call.metadata?.kind === "voice"){ onVoiceCall(call); return; }
-      call.answer(); // só recebemos; nada é enviado de volta
+      const vk = Math.min(25000, Math.max(1000, +call.metadata?.kbps || 4500));
+      call.answer(undefined, { sdpTransform: s => videoSdp(s, vk) }); // só recebemos; nada é enviado de volta
       inCalls.get(call.peer)?.close();
       inCalls.set(call.peer, call);
       call.on("stream", s => addTile(call.peer, s));
@@ -796,11 +807,46 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
   function callWithScreen(id){
     if (!screenStream) return;
     outCalls.get(id)?.close();
-    const call = peer.call(id, screenStream, { metadata: { kind: "screen" } });
+    const vk = QUALITY[$("qualitySel").value].kbps;
+    const call = peer.call(id, screenStream, { metadata: { kind: "screen", kbps: vk }, sdpTransform: s => videoSdp(s, vk) });
     if (!call) return;
     outCalls.set(id, call);
     applyBitrate(call);
     call.on("close", () => { if (outCalls.get(id) === call) outCalls.delete(id); });
+  }
+
+  // Vídeo da tela: prefere VP9 (texto e detalhes mais nítidos com a mesma internet)
+  // e já começa numa taxa alta, em vez de começar borrado e ir melhorando aos poucos.
+  function videoSdp(sdp, kbps){
+    const lines = sdp.split("\r\n");
+    const mi = lines.findIndex(l => l.startsWith("m=video"));
+    if (mi < 0) return sdp;
+    let end = lines.findIndex((l, i) => i > mi && l.startsWith("m="));
+    if (end < 0) end = lines.length;
+    const sec = lines.slice(mi, end);
+    const codec = {};
+    for (const l of sec){ const m = /^a=rtpmap:(\d+) ([\w-]+)\//.exec(l); if (m) codec[m[1]] = m[2].toUpperCase(); }
+    const head = sec[0].split(" ");
+    const pts = head.slice(3);
+    const rank = pt => { const c = codec[pt]; return c === "VP9" ? 0 : c === "H264" ? 1 : c === "VP8" ? 2 : c === "AV1" ? 3 : 9; };
+    const main = pts.filter(pt => rank(pt) < 9);
+    const vp9 = main.filter(pt => codec[pt] === "VP9");
+    // entre os VP9, o perfil 0 primeiro (todo navegador decodifica)
+    const prof0 = pt => sec.some(l => l.startsWith(`a=fmtp:${pt} `) && /profile-id=0/.test(l));
+    vp9.sort((a, b) => (prof0(b) ? 1 : 0) - (prof0(a) ? 1 : 0));
+    const ordered = [...vp9, ...main.filter(pt => codec[pt] !== "VP9").sort((a, b) => rank(a) - rank(b)), ...pts.filter(pt => rank(pt) === 9)];
+    const out = [head.slice(0, 3).concat(ordered).join(" ")];
+    const start = Math.round(kbps * 0.7), min = Math.min(1500, Math.round(kbps * 0.2));
+    const extra = `x-google-start-bitrate=${start};x-google-min-bitrate=${min}`;
+    const done = new Set();
+    for (const l of sec.slice(1)){
+      const f = /^a=fmtp:(\d+) (.*)$/.exec(l);
+      if (f && rank(f[1]) < 9){ out.push(`a=fmtp:${f[1]} ${f[2].replace(/;?x-google-[\w-]+=\d+/g, "")};${extra}`); done.add(f[1]); continue; }
+      out.push(l);
+      const r = /^a=rtpmap:(\d+) /.exec(l);
+      if (r && rank(r[1]) < 9 && !sec.some(x => x.startsWith(`a=fmtp:${r[1]} `))){ out.push(`a=fmtp:${r[1]} ${extra}`); done.add(r[1]); }
+    }
+    return [...lines.slice(0, mi), ...out, ...lines.slice(end)].join("\r\n");
   }
 
   function applyBitrate(call){
@@ -844,7 +890,8 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
       const bar = document.createElement("div"); bar.className = "tile-bar";
       const pill = document.createElement("span"); pill.className = "live-pill"; pill.textContent = "AO VIVO";
       const nm = document.createElement("span"); nm.className = "name";
-      bar.append(pill, nm);
+      const stt = document.createElement("span"); stt.className = "stats";
+      bar.append(pill, nm, stt);
       if (!mine){
         const snd = document.createElement("button"); snd.type = "button"; snd.className = "snd"; snd.textContent = "Ativar som";
         const vol = document.createElement("input"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = .05; vol.value = 1;
@@ -867,6 +914,47 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     layoutStage();
     refreshTileAudio();
   }
+  // Informações da transmissão no rodapé de cada tela (como no Discord), e o motivo quando a imagem piora.
+  const prevBytes = new Map();
+  const kbpsFrom = (key, bytes, t) => {
+    const p = prevBytes.get(key); prevBytes.set(key, { bytes, t });
+    return p && t > p.t ? (bytes - p.bytes) * 8 / (t - p.t) : null; // bytes por ms -> kbps
+  };
+  const fmtRate = k => k == null ? "" : k >= 1000 ? (k / 1000).toFixed(1).replace(".", ",") + " Mbps" : Math.round(k) + " kbps";
+  function setStats(id, parts, lim){
+    const el = tiles.get(id)?.querySelector(".stats"); if (!el) return;
+    el.textContent = parts.filter(Boolean).join(" · ");
+    if (lim){ const b = document.createElement("span"); b.className = "lim"; b.textContent = lim; el.append(b); }
+  }
+  async function updateStreamStats(){
+    if (screenStream && tiles.has(myId)){
+      let worst = null;
+      for (const [id, call] of outCalls){
+        const st = await call.peerConnection?.getStats().catch(() => null); if (!st) continue;
+        st.forEach(r => {
+          if (r.type !== "outbound-rtp" || r.kind !== "video") return;
+          const k = kbpsFrom("o" + id + r.ssrc, r.bytesSent, r.timestamp);
+          const codec = st.get(r.codecId)?.mimeType?.split("/")[1];
+          const cur = { h: r.frameHeight || 0, fps: r.framesPerSecond || 0, k, codec, lim: r.qualityLimitationReason };
+          if (!worst || cur.h < worst.h || (cur.h === worst.h && cur.fps < worst.fps)) worst = cur;
+        });
+      }
+      if (worst){
+        const lim = worst.lim === "bandwidth" ? "Internet limitando" : worst.lim === "cpu" ? "Processador limitando" : "";
+        setStats(myId, [worst.h ? worst.h + "p" : "", worst.fps ? Math.round(worst.fps) + " fps" : "", fmtRate(worst.k), worst.codec], lim);
+      } else setStats(myId, ["Ninguém assistindo"], "");
+    }
+    for (const [id, call] of inCalls){
+      const st = await call.peerConnection?.getStats().catch(() => null); if (!st) continue;
+      st.forEach(r => {
+        if (r.type !== "inbound-rtp" || r.kind !== "video") return;
+        const k = kbpsFrom("i" + id + r.ssrc, r.bytesReceived, r.timestamp);
+        setStats(id, [r.frameHeight ? r.frameHeight + "p" : "", r.framesPerSecond ? Math.round(r.framesPerSecond) + " fps" : "", fmtRate(k)], "");
+      });
+    }
+  }
+  setInterval(() => { if (tiles.size) updateStreamStats(); }, 2000);
+
   // Quem foi silenciado chega sem som para todo mundo.
   function refreshTileAudio(){
     for (const [pid, t] of tiles){
@@ -955,7 +1043,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
 
   // ---------- canal de voz ----------
   // Cada pessoa na voz manda o próprio microfone direto para cada outra (Opus, como o Discord).
-  const VOICE_DEF = { mic: "", out: "", kbps: 96, mode: "vad", auto: true, thr: -50, ns: true, ec: true, agc: true, pttKey: "KeyV", pttLabel: "V" };
+  const VOICE_DEF = { mic: "", out: "", kbps: 96, mode: "vad", auto: true, thr: -50, ns: true, ec: true, agc: true, pttKey: "KeyV", pttLabel: "V", micVol: 100 };
   const vs = (() => {
     let v = {};
     try { v = JSON.parse(store.get("telao-voice") || "{}") || {}; } catch {}
@@ -963,6 +1051,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     if (![64, 96, 128].includes(+v.kbps)) v.kbps = 96;
     if (!["vad", "ptt"].includes(v.mode)) v.mode = "vad";
     v.thr = Math.min(-10, Math.max(-70, +v.thr || -50));
+    v.micVol = Math.min(200, Math.max(50, +v.micVol || 100));
     return v;
   })();
   const saveVs = () => store.set("telao-voice", JSON.stringify(vs));
@@ -970,6 +1059,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
 
   let inVoice = false, micMuted = false, deaf = false, noMic = false, pttDown = false, pttCapture = false;
   let actx = null, gateNode = null, gateOk = false, micDest = null, micSrc = null, micRaw = null, micAn = null, micBuf = null, sendTrack = null;
+  let micIn = null, micOut = null; // entrada (volume do microfone) e saída (depois do compressor) da cadeia de voz
   let gateOpen = false, mySpeaking = false, lastLevel = { db: -100, thr: -50, open: false };
   const voiceState = new Map(); // peerId -> {mute, deaf}
   const voiceOut = new Map();   // peerId -> chamada levando a minha voz
@@ -1012,13 +1102,30 @@ registerProcessor("telao-gate",G);`;
       actx = new AC({ latencyHint: "interactive" });
       micDest = actx.createMediaStreamDestination();
       micDest.channelCount = 1;
+      // Volume do microfone -> compressor (deixa a voz mais alta e uniforme) -> limitador (não estoura).
+      micIn = actx.createGain(); micIn.gain.value = vs.micVol / 100;
+      const comp = actx.createDynamicsCompressor();
+      comp.threshold.value = -30; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.2;
+      const lim = actx.createDynamicsCompressor();
+      lim.threshold.value = -6; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.08;
+      // trava final: nada passa de -0,5 dB, sem distorcer o que está abaixo
+      const clip = actx.createWaveShaper(); clip.oversample = "2x";
+      const curve = new Float32Array(2049);
+      for (let i = 0; i < curve.length; i++){
+        const x = i / 1024 - 1, a = Math.abs(x);
+        curve[i] = Math.sign(x) * (a <= 0.7 ? a : 0.7 + 0.24 * Math.tanh((a - 0.7) / 0.24));
+      }
+      clip.curve = curve;
+      micIn.connect(comp).connect(lim).connect(clip);
+      micOut = clip;
       try {
         await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([GATE_SRC], { type: "application/javascript" })));
         gateNode = new AudioWorkletNode(actx, "telao-gate", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
         gateNode.port.onmessage = e => onLevel(e.data);
-        gateNode.connect(micDest);
+        micOut.connect(gateNode).connect(micDest);
         gateOk = true;
-      } catch { gateOk = false; }
+      } catch { gateOk = false; micOut.connect(micDest); }
+      if (vs.out && actx.setSinkId) actx.setSinkId(vs.out).catch(() => {});
     }
     if (actx.state !== "running") await actx.resume().catch(() => {});
   }
@@ -1039,17 +1146,11 @@ registerProcessor("telao-gate",G);`;
     micRaw?.getTracks().forEach(t => t.stop());
     micRaw = raw;
     micSrc = actx.createMediaStreamSource(raw);
-    micAn = actx.createAnalyser(); micAn.fftSize = 512; micBuf = new Float32Array(512);
-    micSrc.connect(micAn);
-    const old = sendTrack;
-    if (gateOk){ micSrc.connect(gateNode); sendTrack = micDest.stream.getAudioTracks()[0]; }
-    else sendTrack = raw.getAudioTracks()[0];
-    if (old && old !== sendTrack){
-      for (const call of voiceOut.values()){
-        call.peerConnection?.getSenders().find(s => s.track && s.track.kind === "audio")?.replaceTrack(sendTrack).catch(() => {});
-      }
-    }
+    if (!micAn){ micAn = actx.createAnalyser(); micAn.fftSize = 512; micBuf = new Float32Array(512); micOut.connect(micAn); }
+    micSrc.connect(micIn);
+    sendTrack = micDest.stream.getAudioTracks()[0];
     noMic = false;
+    checkMicQuality(raw.getAudioTracks()[0]);
     syncMic();
     listDevices();
   }
@@ -1057,8 +1158,24 @@ registerProcessor("telao-gate",G);`;
   function stopMic(){
     try { micSrc?.disconnect(); } catch {}
     micRaw?.getTracks().forEach(t => t.stop());
-    micRaw = null; micSrc = null; micAn = null;
-    if (!gateOk) sendTrack = null;
+    micRaw = null; micSrc = null;
+  }
+
+  // Fone Bluetooth usando o próprio microfone entra em "modo chamada" (16 kHz):
+  // a voz fica abafada e todo o som do fone fica baixo e abafado também.
+  let micWarned = false;
+  function checkMicQuality(track){
+    const sr = track?.getSettings?.().sampleRate || 0;
+    const label = track?.label || "";
+    const bt = /hands-?free|bluetooth|airpods/i.test(label);
+    const low = sr > 0 && sr <= 24000;
+    const w = $("vMicWarn");
+    if (low || bt){
+      w.textContent = (low ? `Este microfone grava em só ${Math.round(sr / 1000)} kHz, por isso a voz sai abafada. ` : "") +
+        (bt ? "Parece um fone Bluetooth: usar o microfone dele deixa a voz e todo o som do fone abafados e baixos. Escolha outro microfone aqui em cima (o do notebook, da webcam ou um com fio) e o fone volta ao som normal." : "Escolha outro microfone, se tiver.");
+      w.hidden = false;
+      if (!micWarned){ micWarned = true; toast("Seu microfone deixa a voz abafada. Veja a dica em Ajustes de voz."); }
+    } else w.hidden = true;
   }
 
   const micOff = () => micMuted || deaf || mutedMe || noMic;
@@ -1168,8 +1285,11 @@ registerProcessor("telao-gate",G);`;
         e.src = actx.createMediaStreamSource(stream);
         e.an = actx.createAnalyser(); e.an.fftSize = 512; e.buf = new Float32Array(512);
         e.src.connect(e.an);
+        e.gain = actx.createGain(); e.boost = false;
+        e.src.connect(e.gain);
       }
     } catch {}
+    applyPeerVolume(id);
     renderVoice();
   }
 
@@ -1178,14 +1298,25 @@ registerProcessor("telao-gate",G);`;
     voiceIn.delete(id);
     try { e.call.close(); } catch {}
     try { e.src?.disconnect(); } catch {}
+    try { e.gain?.disconnect(); } catch {}
     if (e.audio){ e.audio.srcObject = null; e.audio.remove(); }
   }
 
+  // Até 100%: toca pelo elemento de áudio (o cancelamento de eco do navegador funciona).
+  // Acima de 100%: passa por um amplificador, como o volume de usuário do Discord.
   function applyPeerVolume(id){
     const e = voiceIn.get(id); if (!e?.audio) return;
     const c = cids.get(id);
-    e.audio.volume = Math.min(1, Math.max(0, peerVol[c] ?? 1));
-    e.audio.muted = deaf || mutes.has(c);
+    const v = Math.min(2, Math.max(0, peerVol[c] ?? 1));
+    const muted = deaf || mutes.has(c);
+    if (v > 1 && e.gain && actx){
+      e.gain.gain.value = muted ? 0 : v;
+      if (!e.boost){ e.gain.connect(actx.destination); e.boost = true; }
+      e.audio.volume = 1; e.audio.muted = true;
+    } else {
+      if (e.boost){ try { e.gain.disconnect(); } catch {} e.boost = false; }
+      e.audio.volume = v; e.audio.muted = muted;
+    }
   }
   function refreshVoiceAudio(){ for (const id of voiceIn.keys()) applyPeerVolume(id); }
 
@@ -1245,7 +1376,7 @@ registerProcessor("telao-gate",G);`;
       li.append(av, who, icons);
       if (id !== myId && inVoice){
         const row = document.createElement("label"); row.className = "vol";
-        const r = document.createElement("input"); r.type = "range"; r.min = 0; r.max = 100; r.step = 5;
+        const r = document.createElement("input"); r.type = "range"; r.min = 0; r.max = 200; r.step = 5;
         r.value = Math.round((peerVol[c] ?? 1) * 100);
         r.setAttribute("aria-label", `Volume de ${n}`);
         const pct = document.createElement("span"); pct.textContent = r.value + "%";
@@ -1310,6 +1441,7 @@ registerProcessor("telao-gate",G);`;
     $("vThr").disabled = vs.auto || vs.mode === "ptt";
     $("vAuto").disabled = vs.mode === "ptt";
     $("vNs").checked = vs.ns; $("vEc").checked = vs.ec; $("vAgc").checked = vs.agc;
+    $("vMicVol").value = vs.micVol; $("vMicVolTxt").textContent = vs.micVol + "%";
     paintMeter();
   }
 
@@ -1331,6 +1463,7 @@ registerProcessor("telao-gate",G);`;
   $("vOut").onchange = () => {
     vs.out = $("vOut").value; saveVs();
     for (const e of voiceIn.values()) e.audio?.setSinkId?.(vs.out).catch(() => {});
+    actx?.setSinkId?.(vs.out).catch(() => {});
   };
   $("vKbps").onchange = () => {
     vs.kbps = +$("vKbps").value; saveVs();
@@ -1343,6 +1476,11 @@ registerProcessor("telao-gate",G);`;
   $("pttKeyBtn").onclick = () => { pttCapture = true; paintVoiceDlg(); };
   $("vAuto").onchange = () => { vs.auto = $("vAuto").checked; saveVs(); syncMic(); paintVoiceDlg(); };
   $("vThr").oninput = () => { vs.thr = +$("vThr").value; saveVs(); syncMic(); paintMeter(); };
+  $("vMicVol").oninput = () => {
+    vs.micVol = +$("vMicVol").value; saveVs();
+    $("vMicVolTxt").textContent = vs.micVol + "%";
+    if (micIn) micIn.gain.value = vs.micVol / 100;
+  };
   for (const [k, el] of [["ns", "vNs"], ["ec", "vEc"], ["agc", "vAgc"]]) $(el).onchange = () => { vs[k] = $(el).checked; saveVs(); restartMic(); };
 
   const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "") && document.activeElement.type !== "range" && document.activeElement.type !== "checkbox";
