@@ -90,7 +90,41 @@ button{cursor:pointer}
 .empty{grid-column:1/-1;border:2px dashed var(--line);border-radius:14px;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--muted);padding:24px}
 .empty strong{font:500 18px/1.3 var(--f-display);color:var(--fg)}
 
-.side{border-left:1px solid var(--line);background:var(--panel);display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+.side{border-left:1px solid var(--line);background:var(--panel);display:grid;grid-template-rows:auto auto 1fr auto;min-height:0}
+.voice{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.voice-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.voice-head h2{margin:0}
+.voice-list{list-style:none;margin:-4px;padding:4px;display:flex;flex-direction:column;gap:8px;max-height:30vh;overflow:auto}
+.voice-list li{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 10px;font-size:14px}
+.voice-list .who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.voice-list .vol{grid-column:2/4;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.voice-list .vol input{flex:1;min-width:0;accent-color:var(--accent)}
+.voice-icons{display:flex;gap:4px;color:var(--live)}
+.voice-icons svg{width:15px;height:15px}
+.avatar{transition:box-shadow .08s}
+.avatar.speaking{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--ok)}
+.voice-empty{margin:0;font-size:13px;color:var(--muted)}
+.btn-voice{background:var(--ok);border-color:var(--ok);color:#fff}
+.voice-bar{display:flex;gap:6px;align-items:center}
+.voice-bar .btn-danger{margin-left:auto}
+.vbtn{width:36px;height:34px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--line);background:var(--sunk);padding:0}
+.vbtn svg{width:18px;height:18px}
+.vbtn-sm{width:28px;height:26px}
+.vbtn-sm svg{width:15px;height:15px}
+.vbtn[aria-pressed="true"]{background:var(--live);border-color:var(--live);color:#fff}
+.vbtn:disabled{opacity:.5;cursor:not-allowed}
+svg.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.vset{display:flex;flex-direction:column;gap:16px;margin-bottom:14px}
+.vset .input{padding:9px 12px}
+.seg{display:flex;gap:16px;flex-wrap:wrap;font-size:14px}
+.seg label,.check{display:inline-flex;align-items:center;gap:8px;font-size:14px}
+.ptt-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+.meter{position:relative;height:10px;border-radius:5px;background:var(--sunk);border:1px solid var(--line);overflow:hidden}
+.meter-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--muted);transition:width .05s linear}
+.meter-fill.open{background:var(--ok)}
+.meter-thr{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg);left:50%}
+#vThr{width:100%;accent-color:var(--accent)}
+#vThr:disabled{opacity:.45}
 .side h2{font:600 12px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
 .people{padding:14px 16px;border-bottom:1px solid var(--line);max-height:40vh;overflow:auto}
 .people ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -137,7 +171,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
 @media (max-width:820px){
   #room{height:auto;min-height:100%}
   .main{grid-template-columns:1fr}
-  .side{border-left:0;border-top:1px solid var(--line);grid-template-rows:auto 280px auto}
+  .side{border-left:0;border-top:1px solid var(--line);grid-template-rows:auto auto 280px auto}
 }
 </style>
 </head>
@@ -194,6 +228,20 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
         <h2>Na sala · <span id="peopleCount">1</span></h2>
         <ul id="peopleList"></ul>
       </div>
+      <div class="voice" id="voicePanel">
+        <div class="voice-head">
+          <h2>Canal de voz · <span id="voiceCount">0</span></h2>
+          <button type="button" id="voiceSetBtn" class="vbtn vbtn-sm" title="Ajustes de voz" aria-label="Ajustes de voz"></button>
+        </div>
+        <ul id="voiceList" class="voice-list"></ul>
+        <p class="voice-empty" id="voiceEmpty">Ninguém na voz. Entre para conversar enquanto assistem.</p>
+        <button type="button" id="voiceJoinBtn" class="btn btn-voice">Entrar na voz</button>
+        <div class="voice-bar" id="voiceBar" hidden>
+          <button type="button" id="micBtn" class="vbtn" aria-pressed="false"></button>
+          <button type="button" id="deafBtn" class="vbtn" aria-pressed="false"></button>
+          <button type="button" id="voiceLeaveBtn" class="btn btn-sm btn-danger">Sair da voz</button>
+        </div>
+      </div>
       <div class="chat" id="chatLog" aria-live="polite"></div>
       <form class="chat-form" id="chatForm">
         <input id="chatInput" class="input" maxlength="500" placeholder="Mensagem para a sala" autocomplete="off">
@@ -229,8 +277,9 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
 
 <dialog id="echoHelp" aria-labelledby="echoTitle">
   <h3 id="echoTitle">Seus amigos estão se ouvindo?</h3>
-  <p>No modo <b>Do computador</b>, o navegador captura tudo que sai do seu fone ou caixa de som, inclusive as vozes do Discord. Ele não consegue deixar de fora só um programa. Há três saídas:</p>
+  <p>No modo <b>Do computador</b>, o navegador captura tudo que sai do seu fone ou caixa de som, inclusive as vozes do Discord. Ele não consegue deixar de fora outro programa. Há quatro saídas:</p>
   <ol>
+    <li><b>Use o canal de voz do Telão</b> no lugar do Discord: no Chrome ou Edge atualizados (Windows ou Mac), o Telão tira a própria voz da captura do som do computador, então ninguém se ouve de volta.</li>
     <li><b>Só de uma aba</b>: se o que você mostra roda no navegador (vídeo, filme, jogo de navegador), escolha essa opção e, na janela de compartilhamento, selecione a aba. Vai só o som dela, sem Discord.</li>
     <li><b>Sem som</b>: mostra a imagem e deixa o áudio de fora.</li>
     <li><b>Separar o Discord no Windows</b> (para jogos e programas, configurado uma vez só):
@@ -244,6 +293,54 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     </li>
   </ol>
   <form method="dialog"><button class="btn btn-primary">Entendi</button></form>
+</dialog>
+
+<dialog id="voiceDlg" aria-labelledby="voiceDlgTitle">
+  <h3 id="voiceDlgTitle">Ajustes de voz</h3>
+  <div class="vset">
+    <div class="field">
+      <label class="label" for="vMic">Microfone</label>
+      <select id="vMic" class="input"><option value="">Padrão do sistema</option></select>
+    </div>
+    <div class="field" id="vOutWrap">
+      <label class="label" for="vOut">Saída de áudio</label>
+      <select id="vOut" class="input"><option value="">Padrão do sistema</option></select>
+    </div>
+    <div class="field">
+      <label class="label" for="vKbps">Qualidade da voz</label>
+      <select id="vKbps" class="input">
+        <option value="64">64 kbps · padrão do Discord</option>
+        <option value="96">96 kbps · máximo do Discord sem impulso</option>
+        <option value="128">128 kbps · Discord com impulso</option>
+      </select>
+    </div>
+    <div class="field">
+      <span class="label">Modo de entrada</span>
+      <div class="seg" role="radiogroup">
+        <label><input type="radio" name="vMode" id="vModeVad" value="vad"> Detecção de voz</label>
+        <label><input type="radio" name="vMode" id="vModePtt" value="ptt"> Apertar para falar</label>
+      </div>
+      <div class="ptt-row" id="pttRow">
+        <span>Tecla</span>
+        <button type="button" id="pttKeyBtn" class="btn btn-sm">V</button>
+        <span class="fine">Só funciona com a aba do Telão em primeiro plano.</span>
+      </div>
+    </div>
+    <div class="field" id="sensRow">
+      <span class="label">Sensibilidade do microfone</span>
+      <label class="check" for="vAuto"><input type="checkbox" id="vAuto"> Ajustar automaticamente</label>
+      <div class="meter" aria-hidden="true"><div class="meter-fill" id="vMeter"></div><div class="meter-thr" id="vThrMark"></div></div>
+      <input type="range" id="vThr" min="-70" max="-10" step="1" aria-label="Volume mínimo para abrir o microfone">
+      <p class="fine" id="vTestMsg">Fale algo: a barra fica verde quando sua voz passa.</p>
+    </div>
+    <div class="field">
+      <span class="label">Processamento de voz</span>
+      <label class="check" for="vNs"><input type="checkbox" id="vNs"> Supressão de ruído</label>
+      <label class="check" for="vEc"><input type="checkbox" id="vEc"> Cancelamento de eco</label>
+      <label class="check" for="vAgc"><input type="checkbox" id="vAgc"> Ganho automático</label>
+    </div>
+  </div>
+  <form method="dialog"><button class="btn btn-primary">Pronto</button></form>
 </dialog>
 
 <div id="toast" class="toast" role="status"></div>
@@ -386,6 +483,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     });
     p.on("connection", conn => setupConn(conn));
     p.on("call", call => {
+      if (call.metadata?.kind === "voice"){ onVoiceCall(call); return; }
       call.answer(); // só recebemos; nada é enviado de volta
       inCalls.get(call.peer)?.close();
       inCalls.set(call.peer, call);
@@ -502,7 +600,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     $("lobby").hidden = true; $("room").hidden = false;
     $("codeChip").textContent = roomCode;
     netLabel();
-    renderPeople();
+    renderPeople(); renderVoice();
   }
 
   // ---------- conexões de dados (malha: todo mundo liga com todo mundo) ----------
@@ -526,7 +624,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     if (conn.metadata?.name) names.set(id, clean(conn.metadata.name).slice(0, 24));
 
     conn.on("open", () => {
-      send(conn, { t: "hello", name: myName, sharing: !!screenStream, seq: mySeq, host: hostId === myId, cid });
+      send(conn, { t: "hello", name: myName, sharing: !!screenStream, seq: mySeq, host: hostId === myId, cid, voice: inVoice ? myVoiceState() : null });
       if (screenStream) callWithScreen(id);
       renderPeople();
     });
@@ -542,6 +640,8 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     outCalls.get(id)?.close(); outCalls.delete(id);
     inCalls.get(id)?.close(); inCalls.delete(id);
     removeTile(id);
+    voiceOut.get(id)?.close(); voiceOut.delete(id);
+    detachVoice(id); voiceState.delete(id);
     const who = names.get(id) || "Alguém";
     if (id === hostId){
       hostId = null;
@@ -550,7 +650,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     } else if (had && cids.has(id) && isBanned(cids.get(id))) sys(`${who} foi removido pelo anfitrião por 10 minutos.`);
     else if (had) sys(`${who} saiu.`);
     names.delete(id); seqs.delete(id); cids.delete(id);
-    renderPeople();
+    renderPeople(); renderVoice();
   }
 
   function send(conn, msg){ try { if (conn.open) conn.send(msg); } catch {} }
@@ -569,9 +669,26 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
         if (d.sharing) sharing.add(id); else sharing.delete(id);
         if (d.host === true && hostId !== myId){ hostId = id; clearTimeout(claimTimer); }
         const c = conns.get(id); if (c && !c._greeted){ c._greeted = true; sys(`${names.get(id)} entrou.`); }
-        renderPeople();
+        if (d.voice && typeof d.voice === "object"){
+          voiceState.set(id, { mute: !!d.voice.mute, deaf: !!d.voice.deaf });
+          if (inVoice) callVoice(id);
+        } else voiceState.delete(id);
+        renderPeople(); renderVoice();
         break;
       }
+      case "voice":
+        if (d.on){
+          const was = voiceState.has(id);
+          voiceState.set(id, { mute: !!d.mute, deaf: !!d.deaf });
+          if (!was && inVoice){ sys(`${names.get(id) || "Alguém"} entrou na voz.`); callVoice(id); }
+        } else if (voiceState.has(id)){
+          voiceState.delete(id);
+          voiceOut.get(id)?.close(); voiceOut.delete(id);
+          detachVoice(id);
+          if (inVoice) sys(`${names.get(id) || "Alguém"} saiu da voz.`);
+        }
+        renderVoice();
+        break;
       case "host":
         if (door && hostId === myId) break;
         hostId = id; clearTimeout(claimTimer);
@@ -612,7 +729,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
         const pid = [...cids].find(([, c]) => c === target)?.[0];
         if (pid) sys(`${names.get(pid) || "Alguém"} foi ${d.on ? "silenciado" : "liberado"} pelo anfitrião.`);
       }
-      renderPeople();
+      renderPeople(); renderVoice();
     } else if (d.action === "kick"){
       const ms = Math.min(Math.max(+d.ms || 0, 60000), 3600000);
       bans.set(target, Date.now() + ms);
@@ -627,6 +744,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     screenStream?.getAudioTracks().forEach(t => { t.enabled = !on; });
     $("chatInput").disabled = on;
     $("chatInput").placeholder = on ? "O anfitrião silenciou você" : "Mensagem para a sala";
+    syncMic(); sendVoiceState(); renderVoice();
     toast(on ? "O anfitrião silenciou você: seu som e chat estão bloqueados." : "O anfitrião liberou seu som e chat.");
   }
 
@@ -647,7 +765,8 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     const mode = $("audioSel").value;
     const opts = {
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
-      audio: mode === "none" ? false : { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // restrictOwnAudio: tira da captura o som do próprio Telão (a voz da sala), para ninguém se ouvir de volta.
+      audio: mode === "none" ? false : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
       selfBrowserSurface: "exclude",
       surfaceSwitching: "include",
       systemAudio: mode === "system" ? "include" : "exclude",
@@ -810,6 +929,7 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     }
     for (const [id, t] of tiles) if (id !== myId) t.querySelector(".name").textContent = names.get(id) || "Alguém";
     refreshTileAudio();
+    refreshVoiceAudio();
   }
   function stamp(){ return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }
   function addMsg(name, text, color){
@@ -832,6 +952,420 @@ dialog form{display:flex;justify-content:flex-end;margin-top:8px}
     addMsg(myName, text, colorFor(myId));
     $("chatInput").value = "";
   });
+
+  // ---------- canal de voz ----------
+  // Cada pessoa na voz manda o próprio microfone direto para cada outra (Opus, como o Discord).
+  const VOICE_DEF = { mic: "", out: "", kbps: 96, mode: "vad", auto: true, thr: -50, ns: true, ec: true, agc: true, pttKey: "KeyV", pttLabel: "V" };
+  const vs = (() => {
+    let v = {};
+    try { v = JSON.parse(store.get("telao-voice") || "{}") || {}; } catch {}
+    v = Object.assign({}, VOICE_DEF, v);
+    if (![64, 96, 128].includes(+v.kbps)) v.kbps = 96;
+    if (!["vad", "ptt"].includes(v.mode)) v.mode = "vad";
+    v.thr = Math.min(-10, Math.max(-70, +v.thr || -50));
+    return v;
+  })();
+  const saveVs = () => store.set("telao-voice", JSON.stringify(vs));
+  const peerVol = (() => { try { return JSON.parse(store.get("telao-vol") || "{}") || {}; } catch { return {}; } })();
+
+  let inVoice = false, micMuted = false, deaf = false, noMic = false, pttDown = false, pttCapture = false;
+  let actx = null, gateNode = null, gateOk = false, micDest = null, micSrc = null, micRaw = null, micAn = null, micBuf = null, sendTrack = null;
+  let gateOpen = false, mySpeaking = false, lastLevel = { db: -100, thr: -50, open: false };
+  const voiceState = new Map(); // peerId -> {mute, deaf}
+  const voiceOut = new Map();   // peerId -> chamada levando a minha voz
+  const voiceIn = new Map();    // peerId -> {call, audio, src, an, buf, speaking}
+  const audioBox = document.createElement("div"); audioBox.hidden = true; document.body.append(audioBox);
+
+  const IC = {
+    mic: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+    micOff: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.9 2.3M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.6 2.8M12 18v3M3 3l18 18"/></svg>',
+    head: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/></svg>',
+    headOff: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 12.6-6.5M19.3 9A8 8 0 0 1 20 12v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/><path d="M3 3l18 18"/></svg>',
+    gear: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
+  };
+
+  // Filtro do microfone: roda no processador de áudio (não para quando a aba fica em segundo plano).
+  const GATE_SRC = `class G extends AudioWorkletProcessor{
+constructor(){super();this.mode=0;this.auto=true;this.thr=-50;this.ptt=false;this.floor=-60;this.g=0;this.hold=0;this.n=0;this.max=-100;this.port.onmessage=e=>Object.assign(this,e.data)}
+process(I,O){const x=I[0]&&I[0][0],o=O[0];if(!x){for(const c of o)c.fill(0);return true}
+let s=0;for(let i=0;i<x.length;i++)s+=x[i]*x[i];const db=10*Math.log10(s/x.length+1e-12);
+if(db<this.floor)this.floor+=(db-this.floor)*0.2;else this.floor+=0.004;
+const thr=this.auto?Math.min(-28,Math.max(-62,this.floor+12)):this.thr;
+let want;if(this.mode===2)want=false;else if(this.mode===1)want=!!this.ptt;else{if(db>thr)this.hold=0.35*sampleRate;want=this.hold>0;this.hold-=x.length}
+const t=want?1:0,k=want?0.02:0.002;let g=this.g;const c0=o[0];
+for(let i=0;i<x.length;i++){g+=(t-g)*k;c0[i]=x[i]*g}for(let c=1;c<o.length;c++)o[c].set(c0);this.g=g;
+if(db>this.max)this.max=db;if(++this.n>=8){this.port.postMessage({db:this.max,thr:thr,open:want});this.n=0;this.max=-100}return true}}
+registerProcessor("telao-gate",G);`;
+
+  // Opus para voz: banda cheia (48 kHz), correção de perdas e taxa escolhida.
+  function opusSdp(sdp, kbps){
+    const m = /a=rtpmap:(\d+) opus\/48000\/2/i.exec(sdp); if (!m) return sdp;
+    const pt = m[1];
+    const p = `minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxplaybackrate=48000;sprop-maxcapturerate=48000;maxaveragebitrate=${kbps * 1000}`;
+    const re = new RegExp(`a=fmtp:${pt} [^\\r\\n]*`);
+    return re.test(sdp) ? sdp.replace(re, `a=fmtp:${pt} ${p}`) : sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ${p}`);
+  }
+
+  async function ensureCtx(){
+    if (!actx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      actx = new AC({ latencyHint: "interactive" });
+      micDest = actx.createMediaStreamDestination();
+      micDest.channelCount = 1;
+      try {
+        await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([GATE_SRC], { type: "application/javascript" })));
+        gateNode = new AudioWorkletNode(actx, "telao-gate", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+        gateNode.port.onmessage = e => onLevel(e.data);
+        gateNode.connect(micDest);
+        gateOk = true;
+      } catch { gateOk = false; }
+    }
+    if (actx.state !== "running") await actx.resume().catch(() => {});
+  }
+
+  async function startMic(){
+    await ensureCtx();
+    if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error("sem microfone"), { name: "NotFoundError" });
+    const audio = { echoCancellation: vs.ec, noiseSuppression: vs.ns, autoGainControl: vs.agc, channelCount: 1 };
+    if (vs.mic) audio.deviceId = { exact: vs.mic };
+    let raw;
+    try { raw = await navigator.mediaDevices.getUserMedia({ audio }); }
+    catch (e){
+      if (!vs.mic || !["OverconstrainedError", "NotFoundError"].includes(e.name)) throw e;
+      vs.mic = ""; saveVs(); delete audio.deviceId;
+      raw = await navigator.mediaDevices.getUserMedia({ audio });
+    }
+    try { micSrc?.disconnect(); } catch {}
+    micRaw?.getTracks().forEach(t => t.stop());
+    micRaw = raw;
+    micSrc = actx.createMediaStreamSource(raw);
+    micAn = actx.createAnalyser(); micAn.fftSize = 512; micBuf = new Float32Array(512);
+    micSrc.connect(micAn);
+    const old = sendTrack;
+    if (gateOk){ micSrc.connect(gateNode); sendTrack = micDest.stream.getAudioTracks()[0]; }
+    else sendTrack = raw.getAudioTracks()[0];
+    if (old && old !== sendTrack){
+      for (const call of voiceOut.values()){
+        call.peerConnection?.getSenders().find(s => s.track && s.track.kind === "audio")?.replaceTrack(sendTrack).catch(() => {});
+      }
+    }
+    noMic = false;
+    syncMic();
+    listDevices();
+  }
+
+  function stopMic(){
+    try { micSrc?.disconnect(); } catch {}
+    micRaw?.getTracks().forEach(t => t.stop());
+    micRaw = null; micSrc = null; micAn = null;
+    if (!gateOk) sendTrack = null;
+  }
+
+  const micOff = () => micMuted || deaf || mutedMe || noMic;
+  function syncMic(){
+    const off = micOff();
+    gateNode?.port.postMessage({ mode: off ? 2 : (vs.mode === "ptt" ? 1 : 0), auto: vs.auto, thr: +vs.thr, ptt: pttDown });
+    if (sendTrack) sendTrack.enabled = !off && (gateOk || vs.mode !== "ptt" || pttDown);
+  }
+
+  function onLevel(d){
+    lastLevel = d;
+    gateOpen = !!d.open;
+    if ($("voiceDlg").open) paintMeter();
+  }
+
+  function myVoiceState(){ return { mute: micOff(), deaf }; }
+  function sendVoiceState(){
+    if (!inVoice) return;
+    voiceState.set(myId, myVoiceState());
+    broadcast({ t: "voice", on: true, ...myVoiceState() });
+  }
+
+  async function joinVoice(){
+    if (inVoice) return;
+    const btn = $("voiceJoinBtn"); btn.disabled = true; btn.textContent = "Conectando…";
+    try { await startMic(); }
+    catch (e){
+      noMic = true;
+      try { await ensureCtx(); } catch {}
+      toast(e && e.name === "NotAllowedError"
+        ? "Microfone bloqueado: você entrou só para ouvir. Libere no cadeado ao lado do endereço."
+        : "Não achei um microfone: você entrou só para ouvir.");
+    }
+    btn.disabled = false; btn.textContent = "Entrar na voz";
+    inVoice = true;
+    voiceState.set(myId, myVoiceState());
+    broadcast({ t: "voice", on: true, ...myVoiceState() });
+    for (const id of voiceState.keys()) if (id !== myId) callVoice(id);
+    sys("Você entrou no canal de voz.");
+    syncMic(); renderVoice();
+  }
+
+  function leaveVoice(){
+    if (!inVoice) return;
+    inVoice = false;
+    for (const c of voiceOut.values()) { try { c.close(); } catch {} }
+    voiceOut.clear();
+    for (const id of [...voiceIn.keys()]) detachVoice(id);
+    voiceState.delete(myId);
+    pttDown = false;
+    broadcast({ t: "voice", on: false });
+    if (!$("voiceDlg").open) stopMic();
+    sys("Você saiu do canal de voz.");
+    renderVoice();
+  }
+
+  function callVoice(id){
+    if (!inVoice || noMic || !sendTrack || voiceOut.has(id) || !conns.get(id)?.open) return;
+    const kbps = +vs.kbps;
+    const call = peer.call(id, new MediaStream([sendTrack]), { metadata: { kind: "voice", kbps }, sdpTransform: s => opusSdp(s, kbps) });
+    if (!call) return;
+    voiceOut.set(id, call);
+    tuneVoiceSender(call, kbps);
+    const end = () => { if (voiceOut.get(id) === call) voiceOut.delete(id); };
+    call.on("close", end); call.on("error", end);
+  }
+
+  function tuneVoiceSender(call, kbps){
+    const tryIt = async n => {
+      const sender = call.peerConnection?.getSenders().find(s => s.track && s.track.kind === "audio");
+      if (!sender){ if (n < 20) setTimeout(() => tryIt(n + 1), 250); return; }
+      try {
+        const p = sender.getParameters();
+        if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = kbps * 1000;
+        p.encodings[0].priority = "high";          // voz passa na frente da tela quando a internet aperta
+        p.encodings[0].networkPriority = "high";
+        await sender.setParameters(p);
+      } catch {}
+    };
+    tryIt(0);
+  }
+
+  function onVoiceCall(call){
+    const id = call.peer;
+    if (!inVoice || !conns.has(id) || isBanned(cids.get(id))){ try { call.close(); } catch {} return; }
+    const kbps = Math.min(128, Math.max(32, +call.metadata?.kbps || 96));
+    call.answer(undefined, { sdpTransform: s => opusSdp(s, kbps) });
+    detachVoice(id);
+    const e = { call, audio: null, src: null, an: null, buf: null, speaking: false };
+    voiceIn.set(id, e);
+    call.on("stream", s => attachVoice(id, e, s));
+    const end = () => { if (voiceIn.get(id) === e) detachVoice(id); };
+    call.on("close", end); call.on("error", end);
+  }
+
+  function attachVoice(id, e, stream){
+    if (voiceIn.get(id) !== e) return;
+    if (!e.audio){ e.audio = document.createElement("audio"); e.audio.autoplay = true; audioBox.append(e.audio); }
+    e.audio.srcObject = stream;
+    if (vs.out && e.audio.setSinkId) e.audio.setSinkId(vs.out).catch(() => {});
+    applyPeerVolume(id);
+    e.audio.play().catch(() => {});
+    try {
+      if (actx){
+        try { e.src?.disconnect(); } catch {}
+        e.src = actx.createMediaStreamSource(stream);
+        e.an = actx.createAnalyser(); e.an.fftSize = 512; e.buf = new Float32Array(512);
+        e.src.connect(e.an);
+      }
+    } catch {}
+    renderVoice();
+  }
+
+  function detachVoice(id){
+    const e = voiceIn.get(id); if (!e) return;
+    voiceIn.delete(id);
+    try { e.call.close(); } catch {}
+    try { e.src?.disconnect(); } catch {}
+    if (e.audio){ e.audio.srcObject = null; e.audio.remove(); }
+  }
+
+  function applyPeerVolume(id){
+    const e = voiceIn.get(id); if (!e?.audio) return;
+    const c = cids.get(id);
+    e.audio.volume = Math.min(1, Math.max(0, peerVol[c] ?? 1));
+    e.audio.muted = deaf || mutes.has(c);
+  }
+  function refreshVoiceAudio(){ for (const id of voiceIn.keys()) applyPeerVolume(id); }
+
+  function setMicMuted(on){
+    micMuted = on;
+    if (!on && deaf){ deaf = false; refreshVoiceAudio(); }
+    syncMic(); sendVoiceState(); renderVoice();
+  }
+  function setDeaf(on){
+    deaf = on;
+    refreshVoiceAudio(); syncMic(); sendVoiceState(); renderVoice();
+  }
+
+  // Quem está falando: anel verde no avatar.
+  const rms = (an, buf) => { an.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; return 10 * Math.log10(s / buf.length + 1e-12); };
+  setInterval(() => {
+    if (!inVoice) return;
+    let changed = false;
+    for (const e of voiceIn.values()){
+      const sp = !!(e.an && rms(e.an, e.buf) > -55);
+      if (sp !== e.speaking){ e.speaking = sp; changed = true; }
+    }
+    let me = false;
+    if (!micOff() && micAn){
+      if (gateOk) me = gateOpen;
+      else me = (vs.mode !== "ptt" || pttDown) && rms(micAn, micBuf) > (vs.auto ? -50 : vs.thr);
+    }
+    if (me !== mySpeaking){ mySpeaking = me; changed = true; }
+    if (changed) paintSpeaking();
+  }, 100);
+
+  function paintSpeaking(){
+    for (const av of document.querySelectorAll("#voiceList .avatar")){
+      const id = av.dataset.vid;
+      av.classList.toggle("speaking", id === myId ? mySpeaking : !!voiceIn.get(id)?.speaking);
+    }
+  }
+
+  function renderVoice(){
+    const ul = $("voiceList"); if (!ul) return;
+    ul.textContent = "";
+    const ids = [...voiceState.keys()].filter(id => id === myId ? inVoice : conns.get(id)?.open)
+      .sort((a, b) => (seqOf(a) - seqOf(b)) || (a < b ? -1 : 1));
+    $("voiceCount").textContent = ids.length;
+    $("voiceEmpty").hidden = ids.length > 0;
+    for (const id of ids){
+      const st = id === myId ? myVoiceState() : voiceState.get(id);
+      const li = document.createElement("li");
+      const av = document.createElement("span"); av.className = "avatar"; av.dataset.vid = id; av.style.background = colorFor(id);
+      const n = id === myId ? myName : (names.get(id) || "Alguém");
+      av.textContent = n.slice(0, 1).toUpperCase();
+      const who = document.createElement("span"); who.className = "who"; who.textContent = id === myId ? `${n} (você)` : n;
+      const icons = document.createElement("span"); icons.className = "voice-icons";
+      const c = id === myId ? cid : cids.get(id);
+      if (st?.mute || mutes.has(c)) icons.insertAdjacentHTML("beforeend", IC.micOff);
+      if (st?.deaf) icons.insertAdjacentHTML("beforeend", IC.headOff);
+      li.append(av, who, icons);
+      if (id !== myId && inVoice){
+        const row = document.createElement("label"); row.className = "vol";
+        const r = document.createElement("input"); r.type = "range"; r.min = 0; r.max = 100; r.step = 5;
+        r.value = Math.round((peerVol[c] ?? 1) * 100);
+        r.setAttribute("aria-label", `Volume de ${n}`);
+        const pct = document.createElement("span"); pct.textContent = r.value + "%";
+        r.oninput = () => {
+          peerVol[c] = r.value / 100; pct.textContent = r.value + "%";
+          applyPeerVolume(id); store.set("telao-vol", JSON.stringify(peerVol));
+        };
+        row.append(r, pct); li.append(row);
+      }
+      ul.append(li);
+    }
+    $("voiceJoinBtn").hidden = inVoice;
+    $("voiceBar").hidden = !inVoice;
+    const mb = $("micBtn"), db = $("deafBtn");
+    const mOff = micOff();
+    mb.innerHTML = mOff ? IC.micOff : IC.mic;
+    mb.setAttribute("aria-pressed", String(mOff));
+    mb.disabled = noMic || mutedMe;
+    const mt = noMic ? "Sem microfone" : mutedMe ? "O anfitrião silenciou você" : mOff ? "Ligar microfone" : "Desligar microfone";
+    mb.title = mt; mb.setAttribute("aria-label", mt);
+    db.innerHTML = deaf ? IC.headOff : IC.head;
+    db.setAttribute("aria-pressed", String(deaf));
+    db.title = deaf ? "Voltar a ouvir" : "Ensurdecer"; db.setAttribute("aria-label", db.title);
+    paintSpeaking();
+  }
+
+  // ----- ajustes de voz -----
+  async function listDevices(){
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    let list = [];
+    try { list = await navigator.mediaDevices.enumerateDevices(); } catch { return; }
+    const fill = (sel, kind, cur) => {
+      sel.textContent = "";
+      sel.append(new Option("Padrão do sistema", ""));
+      list.filter(d => d.kind === kind && d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications")
+        .forEach((d, i) => sel.append(new Option(d.label || `${kind === "audioinput" ? "Microfone" : "Saída"} ${i + 1}`, d.deviceId)));
+      sel.value = [...sel.options].some(o => o.value === cur) ? cur : "";
+    };
+    fill($("vMic"), "audioinput", vs.mic);
+    const canSink = "setSinkId" in HTMLMediaElement.prototype;
+    $("vOutWrap").hidden = !canSink;
+    if (canSink) fill($("vOut"), "audiooutput", vs.out);
+  }
+
+  function paintMeter(){
+    const pos = db => Math.min(100, Math.max(0, (db + 80) / 80 * 100));
+    const f = $("vMeter");
+    f.style.width = pos(lastLevel.db) + "%";
+    f.classList.toggle("open", !!lastLevel.open && !micOff());
+    $("vThrMark").style.left = pos(vs.auto ? lastLevel.thr : vs.thr) + "%";
+    $("vThrMark").hidden = vs.mode === "ptt";
+  }
+
+  function paintVoiceDlg(){
+    $("vKbps").value = String(vs.kbps);
+    $("vModeVad").checked = vs.mode === "vad";
+    $("vModePtt").checked = vs.mode === "ptt";
+    $("pttRow").hidden = vs.mode !== "ptt";
+    $("pttKeyBtn").textContent = pttCapture ? "Aperte uma tecla…" : vs.pttLabel;
+    $("vAuto").checked = vs.auto;
+    $("vThr").value = vs.thr;
+    $("vThr").disabled = vs.auto || vs.mode === "ptt";
+    $("vAuto").disabled = vs.mode === "ptt";
+    $("vNs").checked = vs.ns; $("vEc").checked = vs.ec; $("vAgc").checked = vs.agc;
+    paintMeter();
+  }
+
+  async function openVoiceDlg(){
+    paintVoiceDlg();
+    const d = $("voiceDlg");
+    if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+    if (!micRaw){
+      $("vTestMsg").textContent = "Ligando o microfone para teste…";
+      try { await startMic(); $("vTestMsg").textContent = "Fale algo: a barra fica verde quando sua voz passa."; }
+      catch (e){ $("vTestMsg").textContent = e && e.name === "NotAllowedError" ? "O navegador bloqueou o microfone. Libere no cadeado ao lado do endereço." : "Não encontrei um microfone neste aparelho."; }
+    }
+    listDevices();
+  }
+  $("voiceDlg").addEventListener("close", () => { pttCapture = false; if (!inVoice) stopMic(); });
+
+  const restartMic = () => { if (micRaw) startMic().catch(() => toast("Não foi possível trocar o microfone.")); };
+  $("vMic").onchange = () => { vs.mic = $("vMic").value; saveVs(); restartMic(); };
+  $("vOut").onchange = () => {
+    vs.out = $("vOut").value; saveVs();
+    for (const e of voiceIn.values()) e.audio?.setSinkId?.(vs.out).catch(() => {});
+  };
+  $("vKbps").onchange = () => {
+    vs.kbps = +$("vKbps").value; saveVs();
+    if (inVoice){ // refaz as ligações com a nova taxa
+      for (const id of [...voiceOut.keys()]){ try { voiceOut.get(id).close(); } catch {} voiceOut.delete(id); callVoice(id); }
+    }
+    toast("Qualidade da voz: " + vs.kbps + " kbps");
+  };
+  for (const r of document.querySelectorAll('input[name="vMode"]')) r.onchange = () => { vs.mode = r.value; saveVs(); pttDown = false; syncMic(); paintVoiceDlg(); };
+  $("pttKeyBtn").onclick = () => { pttCapture = true; paintVoiceDlg(); };
+  $("vAuto").onchange = () => { vs.auto = $("vAuto").checked; saveVs(); syncMic(); paintVoiceDlg(); };
+  $("vThr").oninput = () => { vs.thr = +$("vThr").value; saveVs(); syncMic(); paintMeter(); };
+  for (const [k, el] of [["ns", "vNs"], ["ec", "vEc"], ["agc", "vAgc"]]) $(el).onchange = () => { vs[k] = $(el).checked; saveVs(); restartMic(); };
+
+  const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "") && document.activeElement.type !== "range" && document.activeElement.type !== "checkbox";
+  document.addEventListener("keydown", e => {
+    if (pttCapture){
+      if (e.key === "Escape"){ pttCapture = false; paintVoiceDlg(); e.preventDefault(); return; }
+      e.preventDefault();
+      vs.pttKey = e.code; vs.pttLabel = e.key.length === 1 ? e.key.toUpperCase() : e.code.replace(/^Key|^Digit/, "");
+      saveVs(); pttCapture = false; paintVoiceDlg(); return;
+    }
+    if (vs.mode !== "ptt" || !inVoice || e.code !== vs.pttKey || e.repeat || typing()) return;
+    pttDown = true; syncMic();
+  });
+  document.addEventListener("keyup", e => { if (e.code === vs.pttKey && pttDown){ pttDown = false; syncMic(); } });
+  window.addEventListener("blur", () => { if (pttDown){ pttDown = false; syncMic(); } });
+
+  $("voiceSetBtn").innerHTML = IC.gear;
+  $("voiceSetBtn").onclick = openVoiceDlg;
+  $("voiceJoinBtn").onclick = joinVoice;
+  $("voiceLeaveBtn").onclick = leaveVoice;
+  $("micBtn").onclick = () => setMicMuted(!micMuted && !deaf ? true : false);
+  $("deafBtn").onclick = () => setDeaf(!deaf);
+  renderVoice();
 
   // ---------- barra ----------
   $("audioSel").value = ["system","tab","none"].includes(store.get("telao-audio")) ? store.get("telao-audio") : "system";
